@@ -59,18 +59,21 @@ function compareData(a, b) {
 }
 
 async function getRemoteData(token, gistId) {
-  const rr = await fetch(`https://api.github.com/gists/${gistId}`, {
+  const r = await fetch(`https://api.github.com/gists/${gistId}`, {
     method: 'GET',
     headers: {
       Accept: "application/vnd.github+json",
       Authorization: `token ${token}`
     },
   })
-  const r = await rr.json();
-  if (r.truncated) {
+  if (!r.ok) {
+    throw new Error(await r.text());
+  }
+  const data = await r.json();
+  if (data.truncated) {
     throw new Error("Gist content is too large");
   }
-  return r.files['bookmark.json'] ? JSON.parse(r.files['bookmark.json'].content) : null;
+  return data.files['bookmark.json'] ? JSON.parse(data.files['bookmark.json'].content) : null;
 }
 
 async function _sync() {
@@ -147,7 +150,7 @@ function cleanBookmark(bookmark) {
 }
 
 async function patchGist(data, token, gistId) {
-  await fetch(`https://api.github.com/gists/${gistId}`, {
+  const r = await fetch(`https://api.github.com/gists/${gistId}`, {
     method: 'PATCH',
     headers: {
       Accept: "application/vnd.github+json",
@@ -161,6 +164,9 @@ async function patchGist(data, token, gistId) {
       }
     })
   });
+  if (!r.ok) {
+    throw new Error(await r.text());
+  }
 }
 
 async function patchBookmark(remote) {
