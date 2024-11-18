@@ -28,6 +28,7 @@ const builtinIds = {
 
 let running = false;
 let bookmarkChanged = false;
+let syncError = null;
 
 async function sync() {
   if (running) {
@@ -37,8 +38,10 @@ async function sync() {
   running = true;
   try {
     await _sync();
+    syncError = null;
   } catch (e) {
     console.error(e);
+    syncError = e;
     await delay(5000)
   }
   running = false;
@@ -297,5 +300,11 @@ browser.alarms.onAlarm.addListener(alarm => {
   console.log("alarm", alarm)
   if (alarm.name === 'sync') {
     sync().catch(e => console.error(e));
+  }
+});
+
+browser.runtime.onMessage.addListener(message => {
+  if (message.action === "getSyncError") {
+    return Promise.resolve(syncError && String(syncError));
   }
 });
