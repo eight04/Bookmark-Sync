@@ -33,7 +33,7 @@ let syncError = null;
 async function sync() {
   if (running) {
     scheduleSync();
-    return;
+    throw new Error("sync is already running");
   }
   running = true;
   try {
@@ -43,8 +43,9 @@ async function sync() {
     console.error(e);
     syncError = e;
     await delay(5000)
+  } finally {
+    running = false;
   }
-  running = false;
 }
 
 function delay(ms) {
@@ -303,8 +304,13 @@ browser.alarms.onAlarm.addListener(alarm => {
   }
 });
 
+const HANDLE_MESSAGE = {
+  getSyncError: () => Promise.resolve(syncError && String(syncError)),
+  sync: () => sync()
+}
+
 browser.runtime.onMessage.addListener(message => {
-  if (message.action === "getSyncError") {
-    return Promise.resolve(syncError && String(syncError));
+  if (HANDLE_MESSAGE[message.action]) {
+    return HANDLE_MESSAGE[message.action](message);
   }
 });

@@ -33,7 +33,7 @@
     "shx": "^0.3.4",
     "sync-version": "^1.0.1",
     "tiny-glob": "^0.2.9",
-    "web-ext": "^7.5.0"
+    "web-ext": "^8.3.0"
   },
   "repository": "eight04/bookmark-sync",
   "private": true,
