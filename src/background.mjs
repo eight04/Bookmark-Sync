@@ -219,10 +219,10 @@ async function patchBookmarkFolder(local = [], remote, parentId) {
         url: remote[j].url,
         type: getBookmarkType(remote[j])
       });
-      j++;
       if (remote[j].children) {
         await patchBookmarkFolder(r.children, remote[j].children, r.id);
       }
+      j++;
       continue;
     }
     // local[i] is deleted
