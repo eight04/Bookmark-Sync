@@ -106,7 +106,7 @@ async function sync() {
     syncError = null;
   } catch (e) {
     console.error(e);
-    logger.log("Sync error:", e);
+    logger.log("Sync error:", e.message || String(e));
     syncError = e;
     await delay(5000);
     throw e;
