@@ -5,7 +5,8 @@
   "license": "MIT",
   "scripts": {
     "lint": "eslint . --cache",
-    "test": "npm run lint && npm run build && web-ext lint",
+    "test": "npm run lint && npm run unit && npm run build && web-ext lint",
+    "unit": "c8 --reporter lcov --reporter html node --test",
     "start": "web-ext run",
     "start-chrome": "web-ext run --target=chromium",
     "build": "npm run build-src && npm run build-artifact",
@@ -27,6 +28,7 @@
     "@rollup/plugin-terser": "^0.4.4",
     "@types/webextension-polyfill": "^0.12.4",
     "@web/rollup-plugin-copy": "^0.5.1",
+    "c8": "^11.0.0",
     "crx3": "^2.0.0",
     "eslint": "^9.39.1",
     "execa": "^9.6.0",

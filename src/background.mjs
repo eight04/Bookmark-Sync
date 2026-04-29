@@ -1,38 +1,12 @@
 import browser from "webextension-polyfill";
 import {diff, applyPatch} from "flat-json-diff";
 
+import {builtinIds, NATIVE_ID, USER_AGENT} from "./lib/env.js";
 import * as logger from "./lib/logger.js";
-
-const USER_AGENT = navigator.userAgent.match(/Firefox/) ? "firefox" : "chrome";
-
-const builtinIds = {
-  // root: {
-  //   chrome: "0",
-  //   firefox: "root________"
-  // },
-  toolbar: {
-    chrome: null,
-    firefox: "toolbar_____",
-  },
-  other: {
-    chrome: null,
-    firefox: "unfiled_____",
-  },
-  mobile: {
-    chrome: null,
-    firefox: "mobile______",
-  },
-  menu: {
-    chrome: null,
-    firefox: "menu________",
-  }
-}
 
 let running = false;
 let bookmarkChanged = true; // assume changed on startup
 let syncError = null;
-
-const NATIVE_ID = Symbol();
 
 init();
 

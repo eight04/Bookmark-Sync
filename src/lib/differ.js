@@ -2,7 +2,7 @@ import treeDiffer from "treediffer";
 
 import {builtinIds, NATIVE_ID, USER_AGENT} from "./env.js";
 
-const OP_CHANGE = Symbol();
+const OP_CHANGE_TO = Symbol();
 const OP_INSERT_AFTER = Symbol();
 const OP_INSERT_CHILD = Symbol();
 const OP_REMOVE = Symbol();
@@ -11,66 +11,159 @@ const OP_MOVE_TO = Symbol();
 const ORIGIN = Symbol();
 const CORRESPONDS = Symbol();
 
-export function diffBookmarkData(data1, data2) {
-  // only diff supported categories
-  const keys = Object.keys(builtinIds).filter(key => builtinIds[key][USER_AGENT] != null);
+export function createDiffer(baseData, keys) {
+  keys = keys || Object.keys(builtinIds).filter(key => builtinIds[key][USER_AGENT] != null);
+  const baseTree = new treeDiffer.Tree(makeRoot(baseData, keys), BookmarkTreeNode);
+  const diffs = [];
+  let generated = false;
 
-  const root1 = makeRoot(data1, keys);
-  const root2 = makeRoot(data2, keys);
-
-  const tree1 = new treeDiffer.Tree(root1, BookmarkTreeNode);
-  const tree2 = new treeDiffer.Tree(root2, BookmarkTreeNode);
-
-  const differ = new treeDiffer.Differ(tree1, tree2);
-  const trans = differ.transactions[tree1.orderedNodes.length - 1][tree2.orderedNodes.length - 1];
-  const op = differ.getCorrespondingNodes(trans, tree1.orderedNodes.length, tree2.orderedNodes.length);
-  return {trans, op, tree1, tree2, size: trans.length};
+  return {
+    diff(newData) {
+      if (generated) {
+        throw new Error("Patch has already been generated");
+      }
+      const newTree = new treeDiffer.Tree(makeRoot(newData, keys), BookmarkTreeNode);
+      const differ = new treeDiffer.Differ(baseTree, newTree);
+      const trans = differ.transactions[baseTree.orderedNodes.length - 1][newTree.orderedNodes.length - 1];
+      const op = differ.getCorrespondingNodes(trans, baseTree.orderedNodes.length, newTree.orderedNodes.length);
+      detectIllegalChanges(op, baseTree, newTree);
+      detectMoves(op, baseTree, newTree);
+      diffs.push({trans, op, tree: newTree, size: trans.length});
+      return this;
+    },
+    generatePatch() {
+      if (generated) {
+        throw new Error("Patch has already been generated");
+      }
+      generated = true;
+      for (const {op, tree, size} of diffs) {
+        if (!size) {
+          continue;
+        }
+        annotateTransaction({
+          tree1: baseTree,
+          tree2: tree,
+          op,
+        });
+      }
+      return resolveNode(baseTree.root, null, {index: 0});
+    }
+  };
 }
 
-export function generatePatch(transArr) {
-  for (let i = 1; i < transArr.length; i++) {
-    if (transArr[i].tree1 !== transArr[0].tree1) {
-      throw new Error("All transactions must share the same tree1");
+function* resolveNode(node, origin = node, ctx) {
+  if (node[CORRESPONDS]) {
+    const l = node[CORRESPONDS];
+    delete node[CORRESPONDS];
+    const set = new Set;
+    for (const n of l) {
+      if (set.has(n)) {
+        continue;
+      }
+      set.add(n);
+      yield* resolveNode(n, origin, ctx);
     }
   }
-  for (const trans of transArr) {
-    annotateTransaction(trans);
+  if (node[OP_CHANGE_TO]) {
+    const value = node[OP_CHANGE_TO];
+    delete node[OP_CHANGE_TO];
+    yield {op: "replace", node: origin, value};
+    yield *resolveNode(value, origin, ctx);
   }
-  return transArr[0].tree1.root.node;
+  if (node[OP_INSERT_AFTER]) {
+    const l = node[OP_INSERT_AFTER];
+    delete node[OP_INSERT_AFTER];
+    ctx.indexBeforeInsert = ctx.index;
+    for (const value of l) {
+      ctx.index++;
+      if (value[OP_MOVE_FROM]) {
+        yield {op: "move", from: value[OP_MOVE_FROM], parent: origin.parent, index: ctx.index};
+        yield *resolveNode(value[OP_MOVE_FROM], value, ctx);
+        delete value[OP_MOVE_FROM];
+      } else {
+        yield {op: "add", parent: origin.parent, index: ctx.index, value};
+      }
+      yield *resolveNode(value, value, ctx);
+    }
+  }
+  if (node[OP_INSERT_CHILD] && !node[OP_MOVE_TO]) {
+    const l = node[OP_INSERT_CHILD];
+    delete node[OP_INSERT_CHILD];
+    const childCtx = {index: origin.children.length};
+    for (const value of l) {
+      if (value[OP_MOVE_FROM]) {
+        yield {op: "move", from: value[OP_MOVE_FROM], parent: origin, index: childCtx.index};
+        yield *resolveNode(value[OP_MOVE_FROM], value, childCtx);
+        delete value[OP_MOVE_FROM];
+      } else {
+        yield {op: "add", parent: origin, index: childCtx.index, value};
+      }
+      yield *resolveNode(value, value, childCtx);
+      childCtx.index++;
+    }
+  }
+  if (node[OP_MOVE_TO]) {
+    // delay the resolve to the target node, just skip
+    delete node[OP_MOVE_TO];
+    ctx.index--;
+    return;
+  }
+  if (node[OP_REMOVE]) {
+    yield {op: "remove", value: origin};
+    // should be handled by OP_MOVE_FROM of the target node, just skip
+    delete node[OP_REMOVE];
+    ctx.index--;
+    return;
+  } 
+  const childCtx = {index: 0};
+  for (const n of node.children) {
+    yield* resolveNode(n, n, childCtx);
+    childCtx.index++;
+  }
 }
 
-export function applyPatch(root) {
-
+function detectIllegalChanges(op, tree1, tree2) {
+  for (const [i, j] of Object.entries(op.change)) {
+    const leftNode = tree1.orderedNodes[i];
+    const rightNode = tree2.orderedNodes[j];
+    if (!leftNode.isModifiedOf(rightNode)) {
+      delete op.change[i];
+      op.insert.push(j);
+      op.remove.push(i);
+    }
+  }
 }
 
-function annotateTransaction(trans) {
-  // collect moves
+function detectMoves(op, tree1, tree2) {
   const moved = [];
-  trans.op.moved = moved;
-  for (let i = 0; i < trans.op.remove.length; i++) {
-    const leftIndex = trans.op.remove[i];
-    for (let j = 0; j < trans.op.insert.length; j++) {
-      const rightIndex = trans.op.insert[j];
-      const fromNode = trans.tree1.orderedNodes[leftIndex];
-      const toNode = trans.tree2.orderedNodes[rightIndex];
+  op.moved = moved;
+  for (let i = 0; i < op.remove.length; i++) {
+    const leftIndex = op.remove[i];
+    for (let j = 0; j < op.insert.length; j++) {
+      const rightIndex = op.insert[j];
+      const fromNode = tree1.orderedNodes[leftIndex];
+      const toNode = tree2.orderedNodes[rightIndex];
       if (fromNode.isEqual(toNode)) {
         moved.push([leftIndex, rightIndex]);
-        trans.op.insert.splice(j, 1);
-        trans.op.remove.splice(i, 1);
+        op.insert.splice(j, 1);
+        op.remove.splice(i, 1);
         i--;
         break;
       }
     }
   }
+}
+
+function annotateTransaction(trans) {
   // annotate changes
   for (const [i, j] of Object.entries(trans.op.change)) {
-    const n1 = trans.tree1.orderedNodes[i].node;
-    const n2 = trans.tree2.orderedNodes[j].node;
-    if (!n1[OP_CHANGE]) {
-      n1[OP_CHANGE] = n2;
-      n2[OP_CHANGE] = n1;
+    const n1 = trans.tree1.orderedNodes[i];
+    const n2 = trans.tree2.orderedNodes[j];
+    if (!n1[OP_CHANGE_TO]) {
+      n1[OP_CHANGE_TO] = n2;
+      // n2[OP_CHANGE_TO] = n1;
     } else {
-      // when there are multiple changes to the same node, treat second change as insert
+      // FIXME: when there are multiple changes to the same node, treat second change as insert?
       if (!n1[OP_INSERT_AFTER]) {
         n1[OP_INSERT_AFTER] = [];
       }
@@ -79,25 +172,24 @@ function annotateTransaction(trans) {
   }
   // annotate removes
   for (const i of trans.op.remove) {
-    const n = trans.tree1.orderedNodes[i].node
+    const n = trans.tree1.orderedNodes[i];
     n[OP_REMOVE] = true;
   }
   // annotate inserts
   for (const i of trans.op.insert) {
     const treeNode = trans.tree2.orderedNodes[i];
-    annotateInsert(treeNode);
+    annotateInsert(treeNode, trans);
   }
   // annotate moves
-  for (const [fromIndex, toIndex] of moved) {
-    let fromData = trans.tree1.orderedNodes[fromIndex].node;
+  for (const [fromIndex, toIndex] of trans.op.moved) {
+    let fromNode = trans.tree1.orderedNodes[fromIndex];
     const toNode = trans.tree2.orderedNodes[toIndex];
-    const toData = toNode.node;
-    // resolve move chain
-    while (fromData[OP_MOVE_TO]) {
-      fromData = fromData[OP_MOVE_TO];
+    // concat move chain
+    while (fromNode[OP_MOVE_TO]) {
+      fromNode = fromNode[OP_MOVE_TO];
     }
-    fromData[OP_MOVE_TO] = toData;
-    toData[OP_MOVE_FROM] = fromData;
+    fromNode[OP_MOVE_TO] = toNode;
+    toNode[OP_MOVE_FROM] = fromNode;
     // insert
     annotateInsert(toNode, trans);
   }
@@ -105,15 +197,14 @@ function annotateTransaction(trans) {
 
 function annotateOrigin(node, trans) {
   const leftIndex = trans.op.newToOld[node.index];
-  const data = node.node;
   if (leftIndex !== undefined) {
-    const leftData = trans.tree1.orderedNodes[leftIndex].node;
-    data[ORIGIN] = leftData;
-    if (!leftData[CORRESPONDS]) {
-      leftData[CORRESPONDS] = [];
+    const leftNode = trans.tree1.orderedNodes[leftIndex];
+    node[ORIGIN] = leftNode;
+    if (!leftNode[CORRESPONDS]) {
+      leftNode[CORRESPONDS] = [];
     }
     // NOTE: corresponds may contain duplicates, make sure to filter out later.
-    leftData[CORRESPONDS].push(data);
+    leftNode[CORRESPONDS].push(node);
   }
 }
 
@@ -121,18 +212,18 @@ function annotateInsert(node, trans) {
   calculatePrev(node);
   if (node.prev) {
     annotateOrigin(node.prev, trans);
-    const preData = node.prev.node;
-    if (!preData[OP_INSERT_AFTER]) {
-      preData[OP_INSERT_AFTER] = [];
+    const preNode = node.prev;
+    if (!preNode[OP_INSERT_AFTER]) {
+      preNode[OP_INSERT_AFTER] = [];
     }
-    preData[OP_INSERT_AFTER].push(node.node);
+    preNode[OP_INSERT_AFTER].push(node);
   } else {
     annotateOrigin(node.parent, trans);
-    const parentData = node.parent.node;
-    if (!parentData[OP_INSERT_CHILD]) {
-      parentData[OP_INSERT_CHILD] = [];
+    const parentNode = node.parent;
+    if (!parentNode[OP_INSERT_CHILD]) {
+      parentNode[OP_INSERT_CHILD] = [];
     }
-    parentData[OP_INSERT_CHILD].push(node.node);
+    parentNode[OP_INSERT_CHILD].push(node);
   }
 }
 
@@ -166,11 +257,31 @@ class BookmarkTreeNode extends treeDiffer.TreeNode {
     if (this.node.type !== otherNode.node.type) return false;
     if (this.node.type === "category") {
       return this.node.id === otherNode.node.id;
-    } else if (this.node.type === "bookmark") {
-      return this.node.url === otherNode.node.url && this.node.title === otherNode.node.title;
-    } else if (this.node.type === "folder") {
+    }
+    if (this.node.type === "folder") {
       return this.node.title === otherNode.node.title;
     }
-    return true;
+    if (this.node.type === "separator" || this.node.type === "root") {
+      return true;
+    }
+    if (this.node.type === "bookmark") {
+      return this.node.url === otherNode.node.url && this.node.title === otherNode.node.title;
+    }
+    throw new Error("Unknown node type: " + this.node.type);
+  }
+  isModifiedOf(otherNode) {
+    const a = this.node;
+    const b = otherNode.node;
+    if (a.type !== b.type) return false;
+    if (a.type === "category") {
+      return a.id === b.id;
+    }
+    if (a.type === "bookmark") {
+      return a.url === b.url || a.title === b.title;
+    }
+    if (a.type === "folder") {
+      return true;
+    }
+    return false;
   }
 }
