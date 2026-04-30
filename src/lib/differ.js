@@ -46,7 +46,7 @@ export function createDiffer(baseData, keys) {
           op,
         });
       }
-      return resolveNode(baseTree.root, null, {index: 0});
+      return resolveNode(baseTree.root, baseTree.root, {index: 0});
     }
   };
 }
@@ -55,12 +55,7 @@ function* resolveNode(node, origin = node, ctx) {
   if (node[CORRESPONDS]) {
     const l = node[CORRESPONDS];
     delete node[CORRESPONDS];
-    const set = new Set;
-    for (const n of l) {
-      if (set.has(n)) {
-        continue;
-      }
-      set.add(n);
+    for (const n of new Set(l)) {
       yield* resolveNode(n, origin, ctx);
     }
   }
@@ -78,34 +73,27 @@ function* resolveNode(node, origin = node, ctx) {
       ctx.index++;
       if (value[OP_MOVE_FROM]) {
         yield {op: "move", from: value[OP_MOVE_FROM], parent: origin.parent, index: ctx.index};
+        origin.parent.children.splice(ctx.index, 0, value);
+        value.parent = origin.parent;
+        const oldIndex = value[OP_MOVE_FROM].parent.children.indexOf(value[OP_MOVE_FROM]);
+        if (value[OP_MOVE_FROM].parent.ctx?.index >= oldIndex) {
+          value[OP_MOVE_FROM].parent.ctx.index--;
+          value[OP_MOVE_FROM].parent.children.splice(oldIndex, 1);
+        }
         yield *resolveNode(value[OP_MOVE_FROM], value, ctx);
         delete value[OP_MOVE_FROM];
       } else {
         yield {op: "add", parent: origin.parent, index: ctx.index, value};
+        origin.parent.children.splice(ctx.index, 0, value);
+        value.parent = origin.parent;
       }
       yield *resolveNode(value, value, ctx);
-    }
-  }
-  if (node[OP_INSERT_CHILD] && !node[OP_MOVE_TO]) {
-    const l = node[OP_INSERT_CHILD];
-    delete node[OP_INSERT_CHILD];
-    const childCtx = {index: origin.children.length};
-    for (const value of l) {
-      if (value[OP_MOVE_FROM]) {
-        yield {op: "move", from: value[OP_MOVE_FROM], parent: origin, index: childCtx.index};
-        yield *resolveNode(value[OP_MOVE_FROM], value, childCtx);
-        delete value[OP_MOVE_FROM];
-      } else {
-        yield {op: "add", parent: origin, index: childCtx.index, value};
-      }
-      yield *resolveNode(value, value, childCtx);
-      childCtx.index++;
     }
   }
   if (node[OP_MOVE_TO]) {
     // delay the resolve to the target node, just skip
     delete node[OP_MOVE_TO];
-    ctx.index--;
+    // ctx.index--;
     return;
   }
   if (node[OP_REMOVE]) {
@@ -116,7 +104,33 @@ function* resolveNode(node, origin = node, ctx) {
     return;
   } 
   const childCtx = {index: 0};
-  for (const n of node.children) {
+  const children = node.children.slice();
+  origin.ctx = childCtx;
+  if (node[OP_INSERT_CHILD]) {
+    const l = node[OP_INSERT_CHILD];
+    delete node[OP_INSERT_CHILD];
+    for (const value of l) {
+      if (value[OP_MOVE_FROM]) {
+        console.log("insert child move", value, value[OP_MOVE_FROM]);
+        yield {op: "move", from: value[OP_MOVE_FROM], parent: origin, index: childCtx.index};
+        // FIXME: avoid resolving the same child multiple times
+        origin.children.splice(childCtx.index, 0, value);
+        value.parent = origin;
+        const oldIndex = value[OP_MOVE_FROM].parent.children.indexOf(value[OP_MOVE_FROM]);
+        if (value[OP_MOVE_FROM].parent.ctx?.index >= oldIndex) {
+          value[OP_MOVE_FROM].parent.ctx.index--;
+          value[OP_MOVE_FROM].parent.children.splice(oldIndex, 1);
+        }
+        yield *resolveNode(value[OP_MOVE_FROM], value, childCtx);
+        delete value[OP_MOVE_FROM];
+      } else {
+        yield {op: "add", parent: origin, index: childCtx.index, value};
+      }
+      yield *resolveNode(value, value, childCtx);
+      childCtx.index++;
+    }
+  }
+  for (const n of children) {
     yield* resolveNode(n, n, childCtx);
     childCtx.index++;
   }
@@ -174,6 +188,18 @@ function annotateTransaction(trans) {
   for (const i of trans.op.remove) {
     const n = trans.tree1.orderedNodes[i];
     n[OP_REMOVE] = true;
+    if (!n[OP_INSERT_AFTER]) {
+      n[OP_INSERT_AFTER] = [];
+    }
+    for (const c of n.children) {
+      const rightIndex = trans.op.oldToNew[c.index];
+      if (rightIndex !== undefined) {
+        const rightNode = trans.tree2.orderedNodes[rightIndex];
+        n[OP_INSERT_AFTER].push(rightNode);
+        rightNode[OP_MOVE_FROM] = c;
+        c[OP_MOVE_TO] = rightNode;
+      }
+    }
   }
   // annotate inserts
   for (const i of trans.op.insert) {
@@ -187,6 +213,9 @@ function annotateTransaction(trans) {
     // concat move chain
     while (fromNode[OP_MOVE_TO]) {
       fromNode = fromNode[OP_MOVE_TO];
+    }
+    if (fromNode === toNode) {
+      continue;
     }
     fromNode[OP_MOVE_TO] = toNode;
     toNode[OP_MOVE_FROM] = fromNode;

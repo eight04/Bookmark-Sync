@@ -209,6 +209,91 @@ test("move bookmark out of folder", () => {
   };
   const expectedPatch = [
     {op: "move", from: "2", parent: "toolbar", index: 1},
+    {op: "remove", value: {id: "1", title: "Folder 1", type: "folder"}},
+  ];
+
+  const differ = createDiffer(data1, KEYS);
+  const patch = differ.diff(data2).generatePatch();
+  assert.deepEqual(unwrapPatch(patch), expectedPatch);
+});
+
+test("move treee", () => {
+  const data1 = {
+    toolbar: [
+      {id: "1", title: "Folder 1", type: "folder", children: [
+        {id: "2", title: "Google Search", url: "https://www.google.com/", type: "bookmark"},
+        {id: "3", title: "GitHub", url: "https://www.github.com/", type: "bookmark"},
+      ]},
+    ],
+    menu: [
+    ]
+  };
+  const data2 = {
+    toolbar: [
+    ],
+    menu: [
+      {id: "1", title: "Folder 1", type: "folder", children: [
+        {id: "2", title: "Google Search", url: "https://www.google.com/", type: "bookmark"},
+        {id: "3", title: "GitHub", url: "https://www.github.com/", type: "bookmark"},
+      ]},
+    ]
+  };
+  const expectedPatch = [
+    {op: "move", from: "1", parent: "menu", index: 0},
+  ];
+
+  const differ = createDiffer(data1, KEYS);
+  const patch = differ.diff(data2).generatePatch();
+  assert.deepEqual(unwrapPatch(patch), expectedPatch);
+});
+
+test("move multiple bookmarks", () => {
+  const data1 = {
+    toolbar: [
+      {id: "1", title: "Google Search", url: "https://www.google.com/", type: "bookmark"},
+      {id: "2", title: "GitHub", url: "https://www.github.com/", type: "bookmark"},
+      {id: "3", title: "StackOverflow", url: "https://stackoverflow.com/", type: "bookmark"},
+      {id: "4", title: "MDN Web Docs", url: "https://developer.mozilla.org/", type: "bookmark"},
+      {id: "5", title: "Reddit", url: "https://www.reddit.com/", type: "bookmark"},
+    ],
+  };
+  const data2 = {
+    toolbar: [
+      {id: "3", title: "StackOverflow", url: "https://stackoverflow.com/", type: "bookmark"},
+      {id: "4", title: "MDN Web Docs", url: "https://developer.mozilla.org/", type: "bookmark"},
+      {id: "5", title: "Reddit", url: "https://www.reddit.com/", type: "bookmark"},
+      {id: "1", title: "Google Search", url: "https://www.google.com/", type: "bookmark"},
+      {id: "2", title: "GitHub", url: "https://www.github.com/", type: "bookmark"},
+    ],
+  };
+  const expectedPatch = [
+    {op: "move", from: "1", parent: "toolbar", index: 5},
+    {op: "move", from: "2", parent: "toolbar", index: 5},
+  ];
+
+  const differ = createDiffer(data1, KEYS);
+  const patch = differ.diff(data2).generatePatch();
+  assert.deepEqual(unwrapPatch(patch), expectedPatch);
+});
+
+test("moved and changed", () => {
+  const data1 = {
+    toolbar: [
+      {id: "1", title: "Google Search", url: "https://www.google.com/", type: "bookmark"},
+    ],
+    menu: [
+    ]
+  };
+  const data2 = {
+    toolbar: [
+    ],
+    menu: [
+      {id: "1", title: "Google Search", url: "https://www.google.com/search", type: "bookmark"},
+    ]
+  };
+  const expectedPatch = [
+    {op: "replace", node: "1", value: {id: "1", title: "Google Search", url: "https://www.google.com/search", type: "bookmark"}},
+    {op: "move", from: "1", parent: "menu", index: 0},
   ];
 
   const differ = createDiffer(data1, KEYS);
