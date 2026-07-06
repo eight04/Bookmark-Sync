@@ -105,11 +105,13 @@ test("move to empty folder", () => {
 test("bookmark replaced by separator", () => {
   const data1 = {
     toolbar: [
+      {id: "3", title: "Example", url: "https://example.com", type: "bookmark"},
       {id: "1", title: "Google Search", url: "https://www.google.com/", type: "bookmark"},
     ],
   };
   const data2 = {
     toolbar: [
+      {id: "3", title: "Example", url: "https://example.com", type: "bookmark"},
       {id: "2", type: "separator"},
     ],
   };

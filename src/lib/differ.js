@@ -111,7 +111,7 @@ function* resolveNode(node, origin = node, ctx) {
     delete node[OP_INSERT_CHILD];
     for (const value of l) {
       if (value[OP_MOVE_FROM]) {
-        console.log("insert child move", value, value[OP_MOVE_FROM]);
+        // console.log("insert child move", value, value[OP_MOVE_FROM]);
         yield {op: "move", from: value[OP_MOVE_FROM], parent: origin, index: childCtx.index};
         // FIXME: avoid resolving the same child multiple times
         origin.children.splice(childCtx.index, 0, value);
@@ -159,6 +159,14 @@ function detectMoves(op, tree1, tree2) {
       const toNode = tree2.orderedNodes[rightIndex];
       if (fromNode.isEqual(toNode)) {
         moved.push([leftIndex, rightIndex]);
+        op.insert.splice(j, 1);
+        op.remove.splice(i, 1);
+        i--;
+        break;
+      }
+      if (fromNode.isModifiedOf(toNode)) {
+        moved.push([leftIndex, rightIndex]);
+        op.change[leftIndex] = rightIndex;
         op.insert.splice(j, 1);
         op.remove.splice(i, 1);
         i--;
