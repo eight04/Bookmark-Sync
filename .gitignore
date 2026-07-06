@@ -6,3 +6,5 @@
 build
 node_modules
 web-ext-artifacts
+lcov.info
+coverage

@@ -1,13 +1,13 @@
 {
   "manifest_version": 2,
   "homepage_url": "https://github.com/eight04/bookmark-to-gist",
-  "name": "__MSG_extName__",
+  "name": "bookmark-to-gist",
   "version": "1.0.0",
   "default_locale": "en",
   "description": "__MSG_extDesc__",
   "icons": {
-    "16": "images/logo-16.png",
-    "48": "images/logo-48.png"
+    "16": "images/icon.svg",
+    "48": "images/icon.svg"
   },
   "background": {
     "scripts": [
@@ -25,13 +25,13 @@
   ],
   "browser_specific_settings": {
     "gecko": {
-      "id": "bookmark-sync@eight04.blogspot.com"
+      "id": "bookmark-to-gist@eight04.blogspot.com"
     }
   },
   "browser_action": {
     "default_icon": {
-      "16": "images/logo-16.png",
-      "48": "images/logo-48.png"
+      "16": "images/icon.svg",
+      "48": "images/icon.svg"
     },
     "default_title": "__MSG_extName__"
   }

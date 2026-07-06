@@ -3,7 +3,7 @@ import globals from "globals";
 
 export default [
   {
-    ignores: ["dist-extension/*", "build", "chrome", "docs"]
+    ignores: ["dist-extension/*", "build", "chrome", "docs", "coverage"]
   },
   js.configs.recommended,
   {

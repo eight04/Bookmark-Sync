@@ -5,7 +5,8 @@
   "license": "MIT",
   "scripts": {
     "lint": "eslint . --cache",
-    "test": "npm run lint && npm run build && web-ext lint",
+    "test": "npm run lint && npm run unit && npm run build && web-ext lint",
+    "unit": "c8 --reporter lcov --reporter html node --test",
     "start": "web-ext run",
     "start-chrome": "web-ext run --target=chromium",
     "build": "npm run build-src && npm run build-artifact",
@@ -24,31 +25,37 @@
   "devDependencies": {
     "@rollup/plugin-json": "^6.1.0",
     "@rollup/plugin-node-resolve": "^16.0.3",
-    "@rollup/plugin-terser": "^0.4.4",
-    "@types/webextension-polyfill": "^0.12.4",
+    "@rollup/plugin-terser": "^1.0.0",
+    "@types/webextension-polyfill": "^0.12.5",
     "@web/rollup-plugin-copy": "^0.5.1",
+    "c8": "^11.0.0",
     "crx3": "^2.0.0",
-    "eslint": "^9.39.1",
-    "execa": "^9.6.0",
+    "eslint": "^10.6.0",
+    "execa": "^9.6.1",
     "npm-run-all": "^4.1.5",
-    "rollup": "^4.53.3",
+    "rollup": "^4.62.2",
     "rollup-plugin-cjs-es": "^3.0.0",
     "rollup-plugin-copy": "^3.5.0",
-    "rollup-plugin-iife": "^0.7.1",
+    "rollup-plugin-iife": "^0.8.0",
     "rollup-plugin-write-output": "^0.2.1",
     "shx": "^0.4.0",
     "sync-version": "^1.1.0",
     "tiny-glob": "^0.2.9",
-    "web-ext": "^9.2.0"
+    "web-ext": "^10.4.0"
   },
   "repository": "eight04/bookmark-to-gist",
   "private": true,
   "dependencies": {
-    "diff": "^8.0.2",
     "event-lite": "^1.0.0",
-    "flat-json-diff": "^0.1.0",
+    "flat-json-diff": "^0.1.1",
     "safe-stable-stringify": "^2.5.0",
+    "treediffer": "^1.1.1",
     "webextension-polyfill": "^0.12.0"
   },
-  "type": "module"
+  "type": "module",
+  "overrides": {
+    "c8": {
+      "yargs": "^18.0.0"
+    }
+  }
 }
