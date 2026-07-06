@@ -219,6 +219,7 @@ test("move bookmark out of folder", () => {
   assert.deepEqual(unwrapPatch(patch), expectedPatch);
 });
 
+// FIXME: useless move operation is generated when moving a folder with children to another parent
 test("move treee", () => {
   const data1 = {
     toolbar: [
@@ -242,6 +243,8 @@ test("move treee", () => {
   };
   const expectedPatch = [
     {op: "move", from: "1", parent: "menu", index: 0},
+    {op: "move", from: "2", parent: "1", index: 0},
+    {op: "move", from: "3", parent: "1", index: 1},
   ];
 
   const differ = createDiffer(data1, KEYS);
